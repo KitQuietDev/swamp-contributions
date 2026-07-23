@@ -75,10 +75,14 @@ swamp model method run my-shelfarr upsert_download_client \
   provider / indexer source (idempotent, matches by name), e.g. Prowlarr.
 - **`update_settings`** — updates one or more Shelfarr settings by key, e.g.
   `download_remote_path`.
+- **`health_check`** — read-only: confirms the shim is reachable and the API key
+  authenticates, without changing anything. Useful as a workflow step in a
+  health-check pipeline, since the other three methods are all mutating
+  (idempotent) upserts.
 
-All three require the `shim-reachable` check to pass first, which confirms the
-shim is up and the API key authenticates before attempting the underlying Rails
-operation.
+The three mutating methods require the `shim-reachable` check to pass first,
+which confirms the shim is up and the API key authenticates before attempting
+the underlying Rails operation.
 
 ## How it works
 

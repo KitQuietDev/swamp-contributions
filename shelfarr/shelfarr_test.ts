@@ -201,6 +201,57 @@ Deno.test("shimFetch throws a descriptive error on a non-2xx response", async ()
   }
 });
 
+Deno.test("health_check hits /health and stores the result without mutating anything", async () => {
+  let capturedMethod: string | undefined;
+  const restore = mockFetch((url, init) => {
+    assertStringIncludes(url, "/health");
+    capturedMethod = init?.method ?? "GET";
+    return new Response(JSON.stringify({ status: "ok" }), { status: 200 });
+  });
+
+  try {
+    const { context, getWrittenResources } = createModelTestContext({
+      globalArgs: GLOBAL_ARGS,
+    });
+
+    await model.methods.health_check.execute(
+      {},
+      // deno-lint-ignore no-explicit-any
+      context as any,
+    );
+
+    assertEquals(capturedMethod, "GET");
+    const written = getWrittenResources();
+    assertEquals(written[0].data.ok, true);
+    assertEquals(written[0].data.status, "ok");
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("health_check rejects descriptively when the shim is unreachable", async () => {
+  const restore = mockFetch(() =>
+    new Response("Unauthorized", { status: 401 })
+  );
+
+  try {
+    const { context } = createModelTestContext({ globalArgs: GLOBAL_ARGS });
+
+    await assertRejects(
+      () =>
+        model.methods.health_check.execute(
+          {},
+          // deno-lint-ignore no-explicit-any
+          context as any,
+        ),
+      Error,
+      "401",
+    );
+  } finally {
+    restore();
+  }
+});
+
 Deno.test("shim-reachable check passes when the shim responds", async () => {
   const restore = mockFetch(() =>
     new Response(JSON.stringify({ status: "ok" }), { status: 200 })

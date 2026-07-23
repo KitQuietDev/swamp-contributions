@@ -52,6 +52,11 @@ const SettingsResultSchema = z.object({
   updated: z.record(z.string(), z.string()),
 });
 
+const HealthCheckResultSchema = z.object({
+  ok: z.boolean(),
+  status: z.string(),
+});
+
 /** Thrown for a non-2xx response from the shim. */
 class ShimApiError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -95,7 +100,7 @@ type LoggerContext = {
 /** Shelfarr manager: download client, acquisition provider, and settings config via the admin shim. */
 export const model = {
   type: "@kitquiet/shelfarr",
-  version: "2026.07.23.2",
+  version: "2026.07.23.3",
   globalArguments: GlobalArgsSchema,
   resources: {
     "download_client": {
@@ -114,6 +119,12 @@ export const model = {
     "settings_update": {
       description: "Result of a Shelfarr settings update",
       schema: SettingsResultSchema,
+      lifetime: "1h",
+      garbageCollection: 5,
+    },
+    "health_check": {
+      description: "Result of a shelfarr-admin-shim health check",
+      schema: HealthCheckResultSchema,
       lifetime: "1h",
       garbageCollection: 5,
     },
@@ -288,6 +299,38 @@ export const model = {
           `update-${Date.now()}`,
           parsed,
         );
+        return { dataHandles: [handle] };
+      },
+    },
+    health_check: {
+      description:
+        "Verify the shelfarr-admin-shim is reachable and the API key authenticates, without changing anything",
+      arguments: z.object({}),
+      execute: async (
+        _args: Record<string, unknown>,
+        context: LoggerContext & {
+          globalArgs: GlobalArgs;
+          writeResource: (
+            specName: string,
+            name: string,
+            data: Record<string, unknown>,
+          ) => Promise<{ name: string }>;
+        },
+      ) => {
+        const raw = await shimFetch(context.globalArgs, "GET", "/health");
+        const parsed = HealthCheckResultSchema.parse({
+          ok: true,
+          ...(raw as Record<string, unknown>),
+        });
+
+        const handle = await context.writeResource(
+          "health_check",
+          `health-${Date.now()}`,
+          parsed,
+        );
+        context.logger.info("Shelfarr shim health check: {status}", {
+          status: parsed.status,
+        });
         return { dataHandles: [handle] };
       },
     },

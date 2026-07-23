@@ -1,0 +1,18 @@
+manifestVersion: 1
+name: "@kitquiet/gluetun"
+version: "2026.07.23.1"
+description: "Read-only VPN status and public IP visibility for gluetun's HTTP control server, using the protocol-agnostic status endpoint (not the OpenVPN-specific one, which misreports on WireGuard setups). API key resolved from a vault at execution time."
+
+repository: https://github.com/KitQuietDev/swamp-contributions
+
+paths:
+  base: manifest
+
+additionalFiles:
+  - README.md
+  - LICENSE.txt
+
+models:
+  - gluetun.ts
+
+platforms: []

@@ -1,0 +1,59 @@
+services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: shelfarr-shim-socket-proxy
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Deny everything by default; only allow what exec+cp actually need.
+      - CONTAINERS=1
+      - EXEC=1
+      - POST=1
+      - IMAGES=0
+      - NETWORKS=0
+      - VOLUMES=0
+      - SERVICES=0
+      - SWARM=0
+      - SYSTEM=0
+      - TASKS=0
+      - BUILD=0
+      - COMMIT=0
+      - DISTRIBUTION=0
+      - PLUGINS=0
+      - SESSION=0
+      - AUTH=0
+      - SECRETS=0
+      - CONFIGS=0
+      - NODES=0
+    networks:
+      - shim-internal
+    mem_limit: 64M
+
+  shelfarr-admin-shim:
+    build: .
+    container_name: shelfarr-admin-shim
+    restart: unless-stopped
+    depends_on:
+      - docker-socket-proxy
+    environment:
+      - SHIM_PORT=8090
+      - SHIM_API_KEY=${SHIM_API_KEY}
+      - SHELFARR_CONTAINER=shelfarr
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
+    ports:
+      - "127.0.0.1:8090:8090"
+    networks:
+      - shim-internal
+      - shim-published
+    mem_limit: 128M
+
+networks:
+  shim-internal:
+    internal: true
+  # Non-internal, used only so the host can reach the shim's published
+  # port. docker-socket-proxy is never attached to this network — it
+  # stays on shim-internal only, with zero outbound routing under any
+  # circumstance. Only the shim (which already has to be reachable to be
+  # useful) gets this narrow loosening.
+  shim-published:

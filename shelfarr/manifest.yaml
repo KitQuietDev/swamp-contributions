@@ -1,0 +1,18 @@
+manifestVersion: 1
+name: "@kitquiet/shelfarr"
+version: "2026.07.23.1"
+description: "Download client, acquisition provider, and settings configuration for Shelfarr (audiobook/ebook acquisition tool), via a companion admin shim since Shelfarr itself has no admin API — only session-cookie/CSRF-protected HTML forms. API key resolved from a vault at execution time."
+
+repository: https://github.com/KitQuietDev/swamp-contributions
+
+paths:
+  base: manifest
+
+additionalFiles:
+  - README.md
+  - LICENSE.txt
+
+models:
+  - shelfarr.ts
+
+platforms: []

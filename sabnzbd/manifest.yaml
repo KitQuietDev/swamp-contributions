@@ -1,0 +1,18 @@
+manifestVersion: 1
+name: "@kitquiet/sabnzbd"
+version: "2026.07.23.1"
+description: "Category CRUD, queue/history visibility, and NZB-by-URL submission for SABnzbd via its REST API, with the API key resolved from a vault at execution time instead of passed as a literal."
+
+repository: https://github.com/KitQuietDev/swamp-contributions
+
+paths:
+  base: manifest
+
+additionalFiles:
+  - README.md
+  - LICENSE.txt
+
+models:
+  - sabnzbd.ts
+
+platforms: []

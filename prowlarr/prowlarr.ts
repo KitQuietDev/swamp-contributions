@@ -115,7 +115,7 @@ type LoggerContext = {
 /** Prowlarr indexer manager: list, add (Torznab), update, sync, and remove indexers. */
 export const model = {
   type: "@kitquiet/prowlarr",
-  version: "2026.07.23.3",
+  version: "2026.07.23.4",
   globalArguments: GlobalArgsSchema,
   resources: {
     "indexer": {
@@ -459,6 +459,18 @@ export const model = {
       toVersion: "2026.07.23.2",
       description:
         "No attribute shape change — version bump for update_indexer, sync_indexer, and pre-flight checks",
+      upgradeAttributes: (old: Record<string, unknown>) => old,
+    },
+    {
+      toVersion: "2026.07.23.3",
+      description:
+        "No attribute shape change — version bump for repository consolidation into swamp-contributions",
+      upgradeAttributes: (old: Record<string, unknown>) => old,
+    },
+    {
+      toVersion: "2026.07.23.4",
+      description:
+        "No attribute shape change — .3 was published without its required upgrade entry; this corrects that",
       upgradeAttributes: (old: Record<string, unknown>) => old,
     },
   ],

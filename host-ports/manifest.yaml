@@ -1,0 +1,18 @@
+manifestVersion: 1
+name: "@kitquiet/host-ports"
+version: "2026.07.23.1"
+description: "Read-only inventory of TCP ports listening on the local host, correlated with owning process (via ss) and, where applicable, the Docker container that published it (via docker ps). Useful as a pre-flight check before binding a new service to a port."
+
+repository: https://github.com/KitQuietDev/swamp-contributions
+
+paths:
+  base: manifest
+
+additionalFiles:
+  - README.md
+  - LICENSE.txt
+
+models:
+  - host_ports.ts
+
+platforms: []

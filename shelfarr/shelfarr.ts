@@ -95,7 +95,7 @@ type LoggerContext = {
 /** Shelfarr manager: download client, acquisition provider, and settings config via the admin shim. */
 export const model = {
   type: "@kitquiet/shelfarr",
-  version: "2026.07.23.1",
+  version: "2026.07.23.2",
   globalArguments: GlobalArgsSchema,
   resources: {
     "download_client": {

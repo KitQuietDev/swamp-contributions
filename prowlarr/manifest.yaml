@@ -1,0 +1,18 @@
+manifestVersion: 1
+name: "@kitquiet/prowlarr"
+version: "2026.07.23.3"
+description: "List, add (Torznab), and remove Prowlarr indexers via its REST API, with the API key resolved from a vault at execution time instead of passed as a literal."
+
+repository: https://github.com/KitQuietDev/swamp-contributions
+
+paths:
+  base: manifest
+
+additionalFiles:
+  - README.md
+  - LICENSE.txt
+
+models:
+  - prowlarr.ts
+
+platforms: []

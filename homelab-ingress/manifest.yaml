@@ -1,0 +1,24 @@
+manifestVersion: 1
+name: "@kitquiet/homelab-ingress"
+version: "2026.11.25.1"
+license: MIT
+description: "SSH-based management of a self-hosted, Cloudflare-free public ingress: nftables/Docker firewall reconciliation, a WireGuard tunnel, a Traefik reverse proxy with its own Let's Encrypt certs, an Authelia forward-auth gate (file or shared-LDAP-directory backed, with optional OIDC provider), an LLDAP user directory, and fail2ban jails. Encodes several non-obvious operational gotchas (Docker chain wipe on nftables reload, mobile-app auth bypass paths, fail2ban's reload-vs-restart trap) discovered standing up a real homelab edge."
+
+repository: https://github.com/KitQuietDev/swamp-contributions
+
+paths:
+  base: manifest
+
+additionalFiles:
+  - README.md
+  - LICENSE.txt
+
+models:
+  - docker_host_firewall.ts
+  - wireguard_tunnel.ts
+  - traefik_stack.ts
+  - authelia_gate.ts
+  - lldap_directory.ts
+  - fail2ban_jail.ts
+
+platforms: []

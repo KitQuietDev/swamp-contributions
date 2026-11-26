@@ -47,7 +47,7 @@ swamp model method run my-prowlarr add_torznab_indexer \
   --input 'name=Jackett - AudiobookBay' \
   --input 'siteBaseUrl=http://jackett:9117' \
   --input 'apiPath=/api/v2.0/indexers/audiobookbay/results/torznab' \
-  --input "siteApiKey=\${{ vault.get(my-vault, JACKETT_API_KEY) }}"
+  --input 'siteApiKey=${{ vault.get(my-vault, JACKETT_API_KEY) }}'
 ```
 
 ## Methods

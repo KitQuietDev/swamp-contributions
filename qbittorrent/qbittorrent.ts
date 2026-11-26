@@ -1,6 +1,7 @@
 /**
- * qBittorrent manager — category CRUD, connection verification, and basic
- * torrent visibility via the WebUI API (v2). Unlike most \*arr-family
+ * qBittorrent manager — category CRUD, connection verification, adding
+ * torrents (magnet or .torrent URL), and torrent visibility via the WebUI
+ * API (v2). Unlike most \*arr-family
  * services, qBittorrent authenticates with a username/password login that
  * issues a short-lived session cookie (`SID`), not a static API key — every
  * method here logs in fresh and discards the session afterward rather than
@@ -40,6 +41,25 @@ const CategorySchema = z.object({
   savePath: z.string(),
 }).passthrough();
 type CategoryData = z.infer<typeof CategorySchema>;
+
+const TorrentSchema = z.object({
+  hash: z.string(),
+  name: z.string(),
+  category: z.string(),
+  state: z.string(),
+  progress: z.number().describe("Fraction complete, 0.0 to 1.0"),
+  sizeBytes: z.number(),
+  downloadedBytes: z.number(),
+  numSeeds: z.number().describe("Connected seeds for this torrent right now"),
+  numLeechs: z.number().describe(
+    "Connected leechers for this torrent right now",
+  ),
+  dlspeedBytesPerSec: z.number(),
+  savePath: z.string(),
+  addedOn: z.iso.datetime().nullable(),
+  fetchedAt: z.iso.datetime(),
+}).passthrough();
+type TorrentData = z.infer<typeof TorrentSchema>;
 
 /** Thrown for a non-2xx response, a failed login, or an unparseable body. */
 class QbittorrentApiError extends Error {
@@ -95,15 +115,22 @@ async function qbittorrentFetch(
   globalArgs: GlobalArgs,
   method: string,
   path: string,
-  body?: URLSearchParams,
+  body?: URLSearchParams | FormData,
 ): Promise<unknown> {
   const sid = await login(globalArgs);
+
+  // FormData sets its own multipart Content-Type (with boundary) via fetch —
+  // setting one manually here would drop the boundary and break the upload.
+  const isFormData = typeof FormData !== "undefined" &&
+    body instanceof FormData;
 
   const response = await fetch(`${globalArgs.baseUrl}${path}`, {
     method,
     headers: {
       Cookie: `SID=${sid}`,
-      ...(body ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
+      ...(body && !isFormData
+        ? { "Content-Type": "application/x-www-form-urlencoded" }
+        : {}),
     },
     body,
   });
@@ -132,7 +159,7 @@ type LoggerContext = {
 /** qBittorrent manager: category CRUD, connection verification, torrent visibility. */
 export const model = {
   type: "@kitquiet/qbittorrent",
-  version: "2026.07.23.1",
+  version: "2026.07.29.1",
   globalArguments: GlobalArgsSchema,
   resources: {
     "category": {
@@ -150,13 +177,24 @@ export const model = {
       lifetime: "1h",
       garbageCollection: 5,
     },
+    "torrent": {
+      description: "A torrent's current state (one record per torrent hash)",
+      schema: TorrentSchema,
+      lifetime: "1h",
+      garbageCollection: 200,
+    },
   },
   checks: {
     "qbittorrent-reachable": {
       description:
         "Confirm qBittorrent is reachable at baseUrl and the credentials authenticate",
       labels: ["live"],
-      appliesTo: ["add_category", "remove_category"],
+      appliesTo: [
+        "add_category",
+        "remove_category",
+        "add_torrent",
+        "remove_torrent",
+      ],
       execute: async (
         context: { globalArgs: GlobalArgs },
       ) => {
@@ -323,5 +361,158 @@ export const model = {
         return { dataHandles: [] };
       },
     },
+    add_torrent: {
+      description:
+        "Add a torrent by magnet link or a URL that serves a .torrent file " +
+        "(qBittorrent fetches it itself). Not idempotent in the strict " +
+        "sense — adding an already-present torrent is a no-op on " +
+        "qBittorrent's side, but this method does not pre-check for that.",
+      arguments: z.object({
+        url: z.string().describe(
+          "Magnet URI or an http(s) URL that serves a .torrent file",
+        ),
+        category: z.string().default("").describe(
+          "Optional category to assign (must already exist — see add_category)",
+        ),
+        paused: z.boolean().default(false).describe(
+          "Add in a paused state instead of starting immediately",
+        ),
+      }),
+      execute: async (
+        args: { url: string; category: string; paused: boolean },
+        context: LoggerContext & {
+          globalArgs: GlobalArgs;
+        },
+      ) => {
+        context.logger.info("Adding torrent from {url}", { url: args.url });
+        const form = new FormData();
+        form.append("urls", args.url);
+        if (args.category) form.append("category", args.category);
+        form.append("paused", args.paused ? "true" : "false");
+
+        const result = await qbittorrentFetch(
+          context.globalArgs,
+          "POST",
+          "/api/v2/torrents/add",
+          form,
+        ) as string;
+
+        // qBittorrent signals a rejected add (bad URL, duplicate outright
+        // refused, etc.) via HTTP 200 with a non-"Ok." body, same pattern as
+        // login — must check the body, not just the status.
+        if (result.trim() !== "Ok.") {
+          throw new QbittorrentApiError(
+            200,
+            `qBittorrent rejected the torrent add: ${result.trim()}`,
+          );
+        }
+        context.logger.info("Torrent add accepted by qBittorrent", {});
+        return { dataHandles: [] };
+      },
+    },
+    list_torrents: {
+      description:
+        "List current torrents and store each as a resource (optionally " +
+        "filtered by category)",
+      arguments: z.object({
+        category: z.string().optional().describe(
+          "Only list torrents in this category",
+        ),
+      }),
+      execute: async (
+        args: { category?: string },
+        context: LoggerContext & {
+          globalArgs: GlobalArgs;
+          writeResource: (
+            specName: string,
+            name: string,
+            data: Record<string, unknown>,
+          ) => Promise<{ name: string }>;
+        },
+      ) => {
+        const path = args.category
+          ? `/api/v2/torrents/info?category=${
+            encodeURIComponent(args.category)
+          }`
+          : "/api/v2/torrents/info";
+        context.logger.info("Fetching torrents from {baseUrl}", {
+          baseUrl: context.globalArgs.baseUrl,
+        });
+        const fetchedAt = new Date().toISOString();
+        const raw = await qbittorrentFetch(
+          context.globalArgs,
+          "GET",
+          path,
+        ) as Array<Record<string, unknown>>;
+
+        const handles = [];
+        for (const t of raw) {
+          const hash = String(t.hash ?? "");
+          const record: TorrentData = {
+            hash,
+            name: String(t.name ?? ""),
+            category: String(t.category ?? ""),
+            state: String(t.state ?? "unknown"),
+            progress: Number(t.progress ?? 0),
+            sizeBytes: Number(t.size ?? 0),
+            downloadedBytes: Number(t.downloaded ?? 0),
+            numSeeds: Number(t.num_seeds ?? 0),
+            numLeechs: Number(t.num_leechs ?? 0),
+            dlspeedBytesPerSec: Number(t.dlspeed ?? 0),
+            savePath: String(t.save_path ?? ""),
+            addedOn: typeof t.added_on === "number" && t.added_on > 0
+              ? new Date(t.added_on * 1000).toISOString()
+              : null,
+            fetchedAt,
+          };
+          handles.push(await context.writeResource("torrent", hash, record));
+        }
+        context.logger.info("Stored {count} torrent(s)", {
+          count: handles.length,
+        });
+        return { dataHandles: handles };
+      },
+    },
+    remove_torrent: {
+      description:
+        "Remove a torrent by hash (succeeds if already gone). Does not " +
+        "delete downloaded files unless deleteFiles is set.",
+      arguments: z.object({
+        hash: z.string().describe("The torrent's info hash"),
+        deleteFiles: z.boolean().default(false).describe(
+          "Also delete the downloaded files from disk",
+        ),
+      }),
+      execute: async (
+        args: { hash: string; deleteFiles: boolean },
+        context: LoggerContext & {
+          globalArgs: GlobalArgs;
+          deleteResource: (instanceName: string) => Promise<void>;
+        },
+      ) => {
+        context.logger.info("Removing torrent {hash}", { hash: args.hash });
+        await qbittorrentFetch(
+          context.globalArgs,
+          "POST",
+          "/api/v2/torrents/delete",
+          new URLSearchParams({
+            hashes: args.hash,
+            deleteFiles: args.deleteFiles ? "true" : "false",
+          }),
+        );
+        await context.deleteResource!(args.hash);
+        context.logger.info("Removed torrent {hash}", { hash: args.hash });
+        return { dataHandles: [] };
+      },
+    },
   },
+  upgrades: [
+    {
+      toVersion: "2026.07.29.1",
+      description: "No attribute shape change to existing resources — adds " +
+        "add_torrent, list_torrents, and remove_torrent methods plus the " +
+        "new torrent resource",
+      upgradeAttributes: (old: Record<string, unknown>) => old,
+    },
+  ],
 };

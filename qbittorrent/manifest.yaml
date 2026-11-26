@@ -1,7 +1,8 @@
 manifestVersion: 1
 name: "@kitquiet/qbittorrent"
-version: "2026.07.23.1"
-description: "Category CRUD and connection verification for qBittorrent's WebUI API, with session-cookie login handled internally and credentials resolved from a vault at execution time instead of passed as literals."
+version: "2026.11.25.1"
+license: MIT
+description: "Category CRUD, adding torrents (magnet/.torrent URL), torrent listing, and connection verification for qBittorrent's WebUI API, with session-cookie login handled internally and credentials resolved from a vault at execution time instead of passed as literals."
 
 repository: https://github.com/KitQuietDev/swamp-contributions
 

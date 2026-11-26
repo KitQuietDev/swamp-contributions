@@ -115,7 +115,7 @@ type LoggerContext = {
 /** Prowlarr indexer manager: list, add (Torznab), update, sync, and remove indexers. */
 export const model = {
   type: "@kitquiet/prowlarr",
-  version: "2026.07.23.4",
+  version: "2026.07.29.1",
   globalArguments: GlobalArgsSchema,
   resources: {
     "indexer": {
@@ -298,7 +298,7 @@ export const model = {
     },
     update_indexer: {
       description:
-        "Update an existing Prowlarr indexer's enable, priority, and/or app profile",
+        "Update an existing Prowlarr indexer's enable, priority, app profile, and/or redirect setting",
       arguments: z.object({
         indexerId: z.number().describe("The Prowlarr indexer ID to update"),
         enable: z.boolean().optional().describe(
@@ -310,6 +310,15 @@ export const model = {
         appProfileId: z.number().optional().describe(
           "Prowlarr app sync profile ID",
         ),
+        redirect: z.boolean().optional().describe(
+          "When true, Prowlarr returns the indexer's raw download URL as-is " +
+            "(client fetches directly). When false, Prowlarr proxies the " +
+            "download itself, appending its own stored credentials — " +
+            "required for indexers whose raw links omit auth (e.g. an " +
+            "apikey query param), which otherwise fail with an indexer-side " +
+            '"missing parameter" error. Only meaningful when the indexer\'s ' +
+            "supportsRedirect capability is true.",
+        ),
       }),
       execute: async (
         args: {
@@ -317,6 +326,7 @@ export const model = {
           enable?: boolean;
           priority?: number;
           appProfileId?: number;
+          redirect?: boolean;
         },
         context: LoggerContext & {
           globalArgs: GlobalArgs;
@@ -341,6 +351,7 @@ export const model = {
         if (args.appProfileId !== undefined) {
           updated.appProfileId = args.appProfileId;
         }
+        if (args.redirect !== undefined) updated.redirect = args.redirect;
 
         context.logger.info("Updating indexer {id}", { id: args.indexerId });
         const rawResult = await prowlarrFetch(
@@ -471,6 +482,12 @@ export const model = {
       toVersion: "2026.07.23.4",
       description:
         "No attribute shape change — .3 was published without its required upgrade entry; this corrects that",
+      upgradeAttributes: (old: Record<string, unknown>) => old,
+    },
+    {
+      toVersion: "2026.07.29.1",
+      description:
+        "No attribute shape change — update_indexer gains a redirect argument",
       upgradeAttributes: (old: Record<string, unknown>) => old,
     },
   ],

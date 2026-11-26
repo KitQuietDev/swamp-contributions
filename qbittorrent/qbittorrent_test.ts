@@ -286,3 +286,148 @@ Deno.test("qbittorrent-reachable check fails descriptively on bad credentials", 
     globalThis.fetch = originalFetch;
   }
 });
+
+Deno.test("add_torrent posts the url as multipart form data without a manual Content-Type", async () => {
+  let capturedForm: FormData | undefined;
+  let capturedContentType: string | null | undefined;
+  const restore = mockFetchWithLogin((url, init) => {
+    if (url.includes("/torrents/add")) {
+      capturedForm = init?.body as FormData;
+      capturedContentType = init?.headers
+        ? new Headers(init.headers).get("Content-Type")
+        : undefined;
+      return new Response("Ok.", { status: 200 });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  });
+
+  try {
+    const { context } = createModelTestContext({ globalArgs: GLOBAL_ARGS });
+
+    await model.methods.add_torrent.execute(
+      {
+        url: "magnet:?xt=urn:btih:abc123",
+        category: "audiobooks",
+        paused: false,
+      },
+      // deno-lint-ignore no-explicit-any
+      context as any,
+    );
+
+    assertEquals(capturedForm?.get("urls"), "magnet:?xt=urn:btih:abc123");
+    assertEquals(capturedForm?.get("category"), "audiobooks");
+    assertEquals(capturedForm?.get("paused"), "false");
+    // FormData must set its own multipart boundary — a manually-set
+    // Content-Type here would break the upload.
+    assertEquals(capturedContentType, null);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("add_torrent throws when qBittorrent rejects the add", async () => {
+  const restore = mockFetchWithLogin((url) => {
+    if (url.includes("/torrents/add")) {
+      return new Response("Fails.", { status: 200 });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  });
+
+  try {
+    const { context } = createModelTestContext({ globalArgs: GLOBAL_ARGS });
+
+    await assertRejects(
+      () =>
+        model.methods.add_torrent.execute(
+          { url: "not-a-real-magnet", category: "", paused: false },
+          // deno-lint-ignore no-explicit-any
+          context as any,
+        ),
+      Error,
+      "rejected the torrent add",
+    );
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("remove_torrent posts the hash and deletes the stored resource", async () => {
+  let capturedBody: string | undefined;
+  const restore = mockFetchWithLogin((url, init) => {
+    if (url.includes("/torrents/delete")) {
+      capturedBody = init?.body?.toString();
+      return new Response("", { status: 200 });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  });
+
+  try {
+    const { context } = createModelTestContext({ globalArgs: GLOBAL_ARGS });
+    const deletedNames: string[] = [];
+    const contextWithDelete = {
+      ...context,
+      deleteResource: (instanceName: string) => {
+        deletedNames.push(instanceName);
+        return Promise.resolve();
+      },
+    };
+
+    await model.methods.remove_torrent.execute(
+      { hash: "deadbeef", deleteFiles: false },
+      // deno-lint-ignore no-explicit-any
+      contextWithDelete as any,
+    );
+
+    assertStringIncludes(capturedBody ?? "", "hashes=deadbeef");
+    assertStringIncludes(capturedBody ?? "", "deleteFiles=false");
+    assertEquals(deletedNames, ["deadbeef"]);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("list_torrents normalizes raw qBittorrent fields into resources", async () => {
+  const restore = mockFetchWithLogin((url) => {
+    if (url.includes("/torrents/info")) {
+      return new Response(
+        JSON.stringify([
+          {
+            hash: "deadbeef",
+            name: "H.P. Lovecraft Omnibus Vol 2",
+            category: "audiobooks",
+            state: "downloading",
+            progress: 0.42,
+            size: 2061584302,
+            downloaded: 866265607,
+            num_seeds: 1,
+            num_leechs: 1,
+            dlspeed: 512000,
+            save_path: "/downloads/audiobooks",
+            added_on: 1785350000,
+          },
+        ]),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  });
+
+  try {
+    const { context, getWrittenResources } = createModelTestContext({
+      globalArgs: GLOBAL_ARGS,
+    });
+
+    await model.methods.list_torrents.execute(
+      {},
+      // deno-lint-ignore no-explicit-any
+      context as any,
+    );
+
+    const written = getWrittenResources();
+    assertEquals(written[0].name, "deadbeef");
+    assertEquals(written[0].data.progress, 0.42);
+    assertEquals(written[0].data.numSeeds, 1);
+  } finally {
+    restore();
+  }
+});

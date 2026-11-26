@@ -335,6 +335,53 @@ Deno.test("update_indexer reads current state, merges changes, and PUTs the resu
   }
 });
 
+Deno.test("update_indexer can turn off redirect so Prowlarr proxies downloads", async () => {
+  let putBody: Record<string, unknown> | undefined;
+  const restore = mockFetch((url, init) => {
+    const method = init?.method ?? "GET";
+    if (method === "GET") {
+      return new Response(
+        JSON.stringify({
+          id: 8,
+          name: "DrunkenSlug",
+          enable: true,
+          protocol: "usenet",
+          priority: 25,
+          implementation: "Newznab",
+          appProfileId: 1,
+          redirect: true,
+        }),
+        { status: 200 },
+      );
+    }
+    if (method === "PUT") {
+      const parsed = JSON.parse(init!.body as string) as Record<
+        string,
+        unknown
+      >;
+      putBody = parsed;
+      return new Response(JSON.stringify(parsed), { status: 202 });
+    }
+    throw new Error(`Unexpected request: ${method} ${url}`);
+  });
+
+  try {
+    const { context } = createModelTestContext({ globalArgs: GLOBAL_ARGS });
+
+    await model.methods.update_indexer.execute(
+      { indexerId: 8, redirect: false },
+      // deno-lint-ignore no-explicit-any
+      context as any,
+    );
+
+    assertEquals(putBody?.redirect, false);
+    // Untouched fields carry through unchanged.
+    assertEquals(putBody?.priority, 25);
+  } finally {
+    restore();
+  }
+});
+
 Deno.test("sync_indexer refreshes stored state from the live API", async () => {
   const restore = mockFetch(() =>
     new Response(

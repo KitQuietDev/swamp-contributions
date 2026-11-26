@@ -1,6 +1,7 @@
 manifestVersion: 1
 name: "@kitquiet/sabnzbd"
-version: "2026.07.23.1"
+version: "2026.11.25.1"
+license: MIT
 description: "Category CRUD, queue/history visibility, and NZB-by-URL submission for SABnzbd via its REST API, with the API key resolved from a vault at execution time instead of passed as a literal."
 
 repository: https://github.com/KitQuietDev/swamp-contributions
